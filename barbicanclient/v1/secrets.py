@@ -18,6 +18,7 @@ import logging
 
 from oslo_utils.timeutils import parse_isotime
 
+from barbicanclient import api_versions
 from barbicanclient import base
 from barbicanclient import exceptions
 from barbicanclient import formatter
@@ -46,18 +47,40 @@ def immutable_after_save(func):
 
 class SecretFormatter(formatter.EntityFormatter):
 
-    columns = ("Secret href",
-               "Name",
-               "Created",
-               "Status",
-               "Content types",
-               "Algorithm",
-               "Bit length",
-               "Secret type",
-               "Mode",
-               "Expiration",
-               )
+    @property
+    def api_version(self):
+        return self._api.api_version
 
+    @property
+    @api_versions.wraps("1.0", "1.0")
+    def columns(self):
+        return ("Secret href",
+                "Name",
+                "Created",
+                "Status",
+                "Content types",
+                "Algorithm",
+                "Bit length",
+                "Secret type",
+                "Mode",
+                "Expiration")
+
+    @property
+    @api_versions.wraps("1.1")
+    def columns(self):  # noqa: F811
+        return ("Secret href",
+                "Name",
+                "Created",
+                "Status",
+                "Content types",
+                "Algorithm",
+                "Bit length",
+                "Secret type",
+                "Mode",
+                "Expiration",
+                "Consumers")
+
+    @api_versions.wraps("1.0", "1.0")
     def _get_formatted_data(self):
         created = self.created.isoformat() if self.created else None
         expiration = self.expiration.isoformat() if self.expiration else None
@@ -70,7 +93,28 @@ class SecretFormatter(formatter.EntityFormatter):
                 self.bit_length,
                 self.secret_type,
                 self.mode,
+                expiration
+                )
+        return data
+
+    @api_versions.wraps("1.1")
+    def _get_formatted_data(self):  # noqa: F811
+        created = self.created.isoformat() if self.created else None
+        expiration = self.expiration.isoformat() if self.expiration else None
+        formatted_consumers = None
+        if self.consumers:
+            formatted_consumers = '\n'.join((str(c) for c in self.consumers))
+        data = (self.secret_ref,
+                self.name,
+                created,
+                self.status,
+                self.content_types,
+                self.algorithm,
+                self.bit_length,
+                self.secret_type,
+                self.mode,
                 expiration,
+                formatted_consumers
                 )
         return data
 
@@ -88,7 +132,7 @@ class Secret(SecretFormatter):
                  payload_content_type=None, payload_content_encoding=None,
                  secret_ref=None, created=None, updated=None,
                  content_types=None, status=None, secret_type=None,
-                 creator_id=None):
+                 creator_id=None, consumers=None):
         """Secret objects should not be instantiated directly.
 
         You should use the `create` or `get` methods of the
@@ -110,14 +154,11 @@ class Secret(SecretFormatter):
             updated=updated,
             content_types=content_types,
             status=status,
-            creator_id=creator_id
+            creator_id=creator_id,
+            consumers=consumers
         )
         self._acl_manager = acl_manager.ACLManager(api)
         self._acls = None
-
-    @property
-    def api_version(self):
-        return self._api.api_version
 
     @property
     def secret_ref(self):
@@ -205,6 +246,15 @@ class Secret(SecretFormatter):
         if self.secret_ref and not self._acls:
             self._acls = self._acl_manager.get(self.secret_ref)
         return self._acls
+
+    @property
+    @lazy
+    def consumers(self):
+        return self._consumers
+
+    @consumers.setter
+    def consumers(self, value):
+        self._name = value
 
     @name.setter
     @immutable_after_save
@@ -379,7 +429,7 @@ class Secret(SecretFormatter):
                         payload=None, payload_content_type=None,
                         payload_content_encoding=None, created=None,
                         updated=None, content_types=None, status=None,
-                        creator_id=None):
+                        creator_id=None, consumers=None):
         self._name = name
         self._algorithm = algorithm
         self._bit_length = bit_length
@@ -389,6 +439,10 @@ class Secret(SecretFormatter):
         self._payload_content_encoding = payload_content_encoding
         self._expiration = expiration
         self._creator_id = creator_id
+        if consumers is not None:
+            self._consumers = consumers
+        else:
+            self._consumers = list()
         if not self._secret_type:
             self._secret_type = "opaque"
         if self._expiration:
@@ -432,7 +486,8 @@ class Secret(SecretFormatter):
                 created=result.get('created'),
                 updated=result.get('updated'),
                 content_types=result.get('content_types'),
-                status=result.get('status')
+                status=result.get('status'),
+                consumers=result.get('consumers', [])
             )
 
     def __repr__(self):

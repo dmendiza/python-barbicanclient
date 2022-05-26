@@ -48,7 +48,7 @@ class _HTTPClient(adapter.Adapter):
         if endpoint:
             endpoint = re.sub("/v1/?$", "", endpoint)
         add_version_to_override = kwargs.pop('add_version_to_override', True)
-        base_api_version = api_versions.APIVersion(api_versions.MIN_VERSION)
+        base_api_version = api_versions.APIVersion(api_versions.MAX_VERSION)
         self.api_version = kwargs.pop('barbican_api_version',
                                       base_api_version)
 
