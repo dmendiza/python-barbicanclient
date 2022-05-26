@@ -17,8 +17,8 @@ import io
 from barbicanclient import barbican as barb
 from barbicanclient.barbican import Barbican
 from barbicanclient import client
-from barbicanclient import exceptions
 from barbicanclient.tests import keystone_client_fixtures
+from barbicanclient.tests import test_base as base
 from barbicanclient.tests import test_client
 
 
@@ -58,11 +58,14 @@ class WhenTestingBarbicanCLI(test_client.BaseEntityResource):
         self.assertIn('usage', self.captured_stderr.getvalue())
 
     def test_should_error_if_noauth_and_authurl_both_specified(self):
-        args = "--no-auth --os-auth-url http://localhost:5000/v3"
+        args = ("--no-auth --os-auth-url http://localhost:5000/v3 "
+                "--endpoint http://localhost:9311/")
         message = (
             'ERROR: argument --os-auth-url/-A: not allowed with '
             'argument --no-auth/-N'
         )
+        self.responses.get('http://localhost:9311/',
+                           json=base.V11_TOP_RESPONSE)
         self.assert_client_raises(args, message)
 
     def _expect_error_with_invalid_noauth_args(self, args):
@@ -72,14 +75,23 @@ class WhenTestingBarbicanCLI(test_client.BaseEntityResource):
         )
         self.assert_client_raises(args, expected_err_msg)
 
-    def test_should_error_if_noauth_and_missing_endpoint_tenantid_args(self):
-        self._expect_error_with_invalid_noauth_args("--no-auth secret list")
+    def _expect_error_with_missing_endpoint_args(self, args):
+        expected_err_msg = (
+            'An auth plugin is required to determine endpoint URL'
+        )
+        self.assert_client_raises(args, expected_err_msg)
+
+    def test_should_error_if_noauth_and_missing_endpoint_args(self):
+        self._expect_error_with_missing_endpoint_args("--no-auth secret list")
+        self._expect_error_with_missing_endpoint_args(
+            "--no-auth --os-tenant-id 123 secret list")
+        self._expect_error_with_missing_endpoint_args(
+            "--no-auth --os-project-id 123 secret list")
+
+    def test_should_error_if_noauth_and_missing_tenantid_args(self):
+        self.responses.get('http://xyz', json=base.V11_TOP_RESPONSE)
         self._expect_error_with_invalid_noauth_args(
             "--no-auth --endpoint http://xyz secret list")
-        self._expect_error_with_invalid_noauth_args(
-            "--no-auth --os-tenant-id 123 secret list")
-        self._expect_error_with_invalid_noauth_args(
-            "--no-auth --os-project-id 123 secret list")
 
     def test_should_succeed_if_noauth_with_valid_args_specified(self):
         args = (
@@ -88,10 +100,12 @@ class WhenTestingBarbicanCLI(test_client.BaseEntityResource):
         )
         list_secrets_url = '{0}/v1/secrets'.format(self.endpoint)
         self.responses.get(list_secrets_url, json={"secrets": [], "total": 0})
+        self.responses.get('http://localhost:9311/',
+                           json=base.V11_TOP_RESPONSE)
         client = self.create_and_assert_client(args)
         secret_list = client.secrets.list()
         self.assertTrue(self.responses._adapter.called)
-        self.assertEqual(1, self.responses._adapter.call_count)
+        self.assertEqual(2, self.responses._adapter.call_count)
         self.assertEqual([], secret_list)
 
     def test_should_error_if_required_keystone_auth_arguments_are_missing(
@@ -101,10 +115,14 @@ class WhenTestingBarbicanCLI(test_client.BaseEntityResource):
             ' (--os-project-name and --os-project-domain-name) or '
             ' (--os-project-name and --os-project-domain-id)'
         )
+        self.responses.get('http://localhost:9311/',
+                           json=base.V11_TOP_RESPONSE)
         self.assert_client_raises(
+            '--endpoint http://localhost:9311/ '
             '--os-auth-url http://localhost:35357/v2.0 secret list',
             expected_error_msg)
         self.assert_client_raises(
+            '--endpoint http://localhost:9311/ '
             '--os-auth-url http://localhost:35357/v2.0 --os-username barbican '
             '--os-password barbican secret list',
             expected_error_msg
@@ -135,9 +153,12 @@ class WhenTestingBarbicanCLI(test_client.BaseEntityResource):
         self.assertIn(message, str(e))
 
     def test_should_fail_create_client_with_no_auth_url(self):
-        args = '--os-auth-token 1234567890 --os-tenant-id 123'
+        args = ('--os-auth-token 1234567890 --os-tenant-id 123 '
+                '--endpoint http://barbican_endpoint:9311/v1')
         message = 'ERROR: please specify --os-auth-url'
         argv, remainder = self.parser.parse_known_args(args.split())
+        self.responses.get('http://barbican_endpoint:9311/',
+                           json=base.V11_TOP_RESPONSE)
         e = self.assertRaises(
             Exception, self.barbican.create_client, argv
         )
@@ -145,8 +166,10 @@ class WhenTestingBarbicanCLI(test_client.BaseEntityResource):
 
     def test_should_fail_missing_credentials(self):
         message = 'ERROR: please specify authentication credentials'
-        args = ''
+        args = '--endpoint http://barbican_endpoint:9311/v1'
         argv, remainder = self.parser.parse_known_args(args.split())
+        self.responses.get('http://barbican_endpoint:9311',
+                           json=base.V11_TOP_RESPONSE)
         e = self.assertRaises(
             Exception, self.barbican.create_client, argv
         )
@@ -161,6 +184,8 @@ class WhenTestingBarbicanCLI(test_client.BaseEntityResource):
         auth_args = ('--no-auth --endpoint http://barbican_endpoint:9311/v1 '
                      '--os-project-id project1')
         argv, remainder = self.parser.parse_known_args(auth_args.split())
+        self.responses.get('http://barbican_endpoint:9311/',
+                           json=base.V11_TOP_RESPONSE)
         barbican_client = self.barbican.create_client(argv)
         httpclient = barbican_client.secrets._api
 
@@ -180,6 +205,8 @@ class WhenTestingBarbicanCLI(test_client.BaseEntityResource):
                                 '--barbican-api-version v1')
         args = auth_args + ' ' + endpoint_filter_args
         argv, remainder = self.parser.parse_known_args(args.split())
+        self.responses.get('http://barbican_endpoint:9311',
+                           json=base.V11_TOP_RESPONSE)
         barbican_client = self.barbican.create_client(argv)
         httpclient = barbican_client.secrets._api
 
@@ -190,6 +217,9 @@ class WhenTestingBarbicanCLI(test_client.BaseEntityResource):
         self.assertEqual('v1', httpclient.version)
 
     def test_should_fail_if_provide_unsupported_api_version(self):
+        # This test will no longer fail because the client will negotiate
+        # a lower version that is compatible with the server.
+        # TODO(alee) add new tests for when server and client are incompatible
         auth_args = ('--no-auth --endpoint http://barbican_endpoint:9311/v1 '
                      '--os-project-id project1')
         endpoint_filter_args = ('--interface private '
@@ -199,10 +229,8 @@ class WhenTestingBarbicanCLI(test_client.BaseEntityResource):
                                 '--barbican-api-version v2')
         args = auth_args + ' ' + endpoint_filter_args
         argv, remainder = self.parser.parse_known_args(args.split())
-
-        self.assertRaises(exceptions.UnsupportedVersion,
-                          self.barbican.create_client,
-                          argv)
+        self.responses.get('http://barbican_endpoint:9311',
+                           json=base.V11_TOP_RESPONSE)
 
     def test_should_prevent_mutual_exclusive_file_opt(self):
         args = (
@@ -212,10 +240,12 @@ class WhenTestingBarbicanCLI(test_client.BaseEntityResource):
         )
         list_secrets_url = '{0}/v1/secrets'.format(self.endpoint)
         self.responses.get(list_secrets_url, json={"secrets": [], "total": 0})
+        self.responses.get('http://localhost:9311',
+                           json=base.V11_TOP_RESPONSE)
         client = self.create_and_assert_client(args)
         secret_list = client.secrets.list()
         self.assertTrue(self.responses._adapter.called)
-        self.assertEqual(1, self.responses._adapter.call_count)
+        self.assertEqual(2, self.responses._adapter.call_count)
         self.assertEqual([], secret_list)
 
     def test_insecure_true_kwargs_set_correctly(self):
@@ -231,12 +261,15 @@ class WhenTestingBarbicanCLI(test_client.BaseEntityResource):
         argv.insecure = True
         argv.os_identity_api_version = '2.0'
         argv.os_tenant_name = 'my_tenant_name'
+        self.responses.get('https://barbican_endpoint:9311/',
+                           json=base.V11_TOP_RESPONSE)
         barbican_client = self.barbican.create_client(argv)
         httpclient = barbican_client.secrets._api
         self.assertFalse(httpclient.session.verify)
 
     def test_cafile_certfile_keyfile_kwargs_set_correctly(self):
         auth_args = ('no_auth '
+                     '--endpoint https://barbican_endpoint:9311/v1 '
                      '--os-auth-url https://keystone_endpoint:5000/v2 '
                      '--os-auth-token f554ccb5-e157-4824-b67b-d139c87bc555 '
                      '--os-project-id project1')
@@ -252,6 +285,8 @@ class WhenTestingBarbicanCLI(test_client.BaseEntityResource):
         argv.os_key = 'key.pem'
         argv.os_identity_api_version = '2.0'
         argv.os_tenant_name = 'my_tenant_name'
+        self.responses.get('https://barbican_endpoint:9311/',
+                           json=base.V11_TOP_RESPONSE)
         barbican_client = self.barbican.create_client(argv)
         httpclient = barbican_client.secrets._api
         self.assertEqual('ca.pem', httpclient.session.verify)

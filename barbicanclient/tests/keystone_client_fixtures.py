@@ -18,6 +18,7 @@ from requests_mock.contrib import fixture
 import testtools
 
 import barbicanclient.barbican
+from barbicanclient.tests import test_base as base
 
 # these are copied from python-keystoneclient tests
 BASE_HOST = 'http://keystone.example.com'
@@ -255,6 +256,8 @@ class KeystoneClientFixture(testtools.TestCase):
 
     def test_v2_auth(self):
         # Mock Keystone version discovery and token request
+        self.responses.get('http://www.barbican.com',
+                           json=base.V11_TOP_RESPONSE)
         self.responses.get(V2_URL, body=V2_VERSION_ENTRY)
         self.responses.post(
             '{0}/tokens'.format(V2_URL),
@@ -265,6 +268,8 @@ class KeystoneClientFixture(testtools.TestCase):
 
     def test_v3_auth(self):
         # Mock Keystone version discovery and token request
+        self.responses.get('http://www.barbican.com',
+                           json=base.V11_TOP_RESPONSE)
         self.responses.get(V3_URL, text=V3_VERSION_ENTRY)
         id, v3_token = generate_v3_project_scoped_token()
 

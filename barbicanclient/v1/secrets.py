@@ -116,6 +116,10 @@ class Secret(SecretFormatter):
         self._acls = None
 
     @property
+    def api_version(self):
+        return self._api.api_version
+
+    @property
     def secret_ref(self):
         return self._secret_ref
 

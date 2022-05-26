@@ -207,6 +207,10 @@ class ACL(object):
             self._operation_acls.append(acl)
 
     @property
+    def api_version(self):
+        return self._api.api_version
+
+    @property
     def entity_ref(self):
         """Entity URI reference."""
         return self._entity_ref

@@ -67,6 +67,9 @@ class BaseEntityManager(object):
         self._api = api
         self._entity = entity
 
+    def api_version(self):
+        return self._api.api_version
+
     def total(self):
         """Returns the total number of entities stored in Barbican."""
         params = {'limit': 0, 'offset': 0}

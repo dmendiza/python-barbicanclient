@@ -20,6 +20,35 @@ import barbicanclient
 from barbicanclient import base
 from barbicanclient import version
 
+V1_RESPONSE = {
+    "version": {
+        "id": "v1",
+        "status": "stable",
+        "links": [
+            {"rel": "self",
+             "href": "http://localhost:9311/v1/"},
+            {"rel": "describedby",
+             "type": "text/html",
+             "href": "https://docs.openstack.org/"}],
+        "media-types": [
+            {"base": "application/json",
+             "type": "application/vnd.openstack.key-manager-v1+json"}]
+    }
+}
+
+V11_TOP_RESPONSE = {
+    "versions": [{
+        "id": "v1", "status": "CURRENT",
+        "min_version": "1.0",
+        "max_version": "1.1",
+        "links": [
+            {"rel": "self", "href": "http://localhost:9311/v1/"},
+            {"rel": "describedby",
+             "type": "text/html",
+             "href": "https://docs.openstack.org/"}]
+    }]
+}
+
 
 class TestValidateRef(testtools.TestCase):
 

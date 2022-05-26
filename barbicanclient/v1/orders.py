@@ -154,6 +154,10 @@ class Order(object, metaclass=abc.ABCMeta):
             self._meta['expiration'] = parse_isotime(self._meta['expiration'])
 
     @property
+    def api_version(self):
+        return self._api.api_version
+
+    @property
     def name(self):
         return self._meta.get('name')
 

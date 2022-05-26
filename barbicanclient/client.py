@@ -16,6 +16,7 @@
 import importlib
 import logging
 import os
+import re
 import sys
 import warnings
 
@@ -23,7 +24,9 @@ from keystoneauth1 import adapter
 from keystoneauth1 import session as ks_session
 from oslo_utils import importutils
 
+from barbicanclient import api_versions
 from barbicanclient import exceptions
+from barbicanclient import versions
 
 
 LOG = logging.getLogger(__name__)
@@ -41,16 +44,32 @@ class _HTTPClient(adapter.Adapter):
         kwargs.setdefault('version', _DEFAULT_API_VERSION)
         endpoint = kwargs.pop('endpoint', None)
 
+        # remove /v1 because this will not work for version client
+        if endpoint:
+            endpoint = re.sub("/v1/?$", "", endpoint)
+        add_version_to_override = kwargs.pop('add_version_to_override', True)
+        base_api_version = api_versions.APIVersion(api_versions.MIN_VERSION)
+        self.api_version = kwargs.pop('barbican_api_version',
+                                      base_api_version)
+
         super(_HTTPClient, self).__init__(session, **kwargs)
 
         if endpoint:
-            self.endpoint_override = '{0}/{1}'.format(endpoint, self.version)
+            if add_version_to_override:
+                self.endpoint_override = '{0}/{1}'.format(
+                    endpoint, self.version)
+            else:
+                self.endpoint_override = endpoint
 
         if project_id is None:
             self._default_headers = dict()
         else:
             # If provided we'll include the project ID in all requests.
             self._default_headers = {'X-Project-Id': project_id}
+
+        if self.api_version is not None:
+            self._default_headers['OpenStack-API-Version'] = (
+                "key-manager  " + self.api_version.get_string())
 
     def request(self, *args, **kwargs):
         headers = kwargs.setdefault('headers', {})
@@ -179,6 +198,28 @@ def Client(version=None, session=None, *args, **kwargs):
                "%(versions)s") % {'version': version,
                                   'versions': supported_versions}
         raise exceptions.UnsupportedVersion(msg)
+
+
+class VersionClient(object):
+
+    def __init__(self, session=None, *args, **kwargs):
+        """Version client object used to interact with barbican service.
+
+        :param session: An instance of keystoneauth1.session.Session that
+            can be either authenticated, or not authenticated.  When using
+            a non-authenticated Session, you must provide some additional
+            parameters.  When no session is provided it will default to a
+            non-authenticated Session.
+        :param endpoint: Barbican endpoint url. Required when a session is not
+            given, or when using a non-authenticated session.
+            When using an authenticated session, the client will attempt
+            to get an endpoint from the session.
+        """
+        kwargs.setdefault('add_version_to_override', False)
+        if not session:
+            session = ks_session.Session(verify=kwargs.pop('verify', True))
+        self.client = _HTTPClient(session=session, *args, **kwargs)
+        self.versions = versions.VersionManager(self.client)
 
 
 def env(*vars, **kwargs):

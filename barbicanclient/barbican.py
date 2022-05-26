@@ -32,6 +32,7 @@ from keystoneauth1 import session
 
 import barbicanclient
 from barbicanclient._i18n import _LW
+from barbicanclient import api_versions
 from barbicanclient import client
 
 
@@ -167,6 +168,26 @@ class Barbican(app.App):
         created_client = None
         endpoint_filter_kwargs = self._get_endpoint_filter_kwargs(args)
 
+        max_version = api_versions.APIVersion(api_versions.MAX_VERSION)
+        # get corect version
+        version_client = client.VersionClient(
+            endpoint=args.endpoint,
+            project_id=args.os_tenant_id or args.os_project_id,
+            verify=not args.insecure,
+            barbican_api_version=max_version,
+            **endpoint_filter_kwargs
+        )
+
+        if not args.barbican_api_version:
+            requested_version = api_versions.APIVersion(
+                api_versions.MAX_VERSION)
+        else:
+            requested_version = api_versions.APIVersion(
+                args.barbican_api_version)
+
+        discovered_version = api_versions.discover_version(
+            version_client, requested_version)
+
         api_version = args.os_identity_api_version
         if args.no_auth and args.os_auth_url:
             raise Exception(
@@ -184,6 +205,7 @@ class Barbican(app.App):
                 endpoint=args.endpoint,
                 project_id=args.os_tenant_id or args.os_project_id,
                 verify=not args.insecure,
+                barbican_api_version=discovered_version,
                 **endpoint_filter_kwargs
             )
         # Token-based authentication
@@ -200,6 +222,7 @@ class Barbican(app.App):
             created_client = client.Client(
                 session=session,
                 endpoint=args.endpoint,
+                barbican_api_version=discovered_version,
                 **endpoint_filter_kwargs
             )
 
@@ -217,6 +240,7 @@ class Barbican(app.App):
             created_client = client.Client(
                 session=session,
                 endpoint=args.endpoint,
+                barbican_api_version=discovered_version,
                 **endpoint_filter_kwargs
             )
         else:
@@ -229,8 +253,10 @@ class Barbican(app.App):
                                 'barbican_api_version', 'region_name')
         kwargs = dict((key, getattr(args, key)) for key in endpoint_filter_keys
                       if getattr(args, key, None))
+        # TODO(alee): Just get the major version and prepend a 'v'
         if 'barbican_api_version' in kwargs:
-            kwargs['version'] = kwargs.pop('barbican_api_version')
+            kwargs['version'] = 'v1'
+            kwargs.pop('barbican_api_version')
         return kwargs
 
     def build_option_parser(self, description, version, argparse_kwargs=None):
@@ -329,7 +355,10 @@ class Barbican(app.App):
         parser.add_argument('--barbican-api-version',
                             metavar='<barbican-api-version>',
                             default=client.env('BARBICAN_API_VERSION'),
-                            help='Defaults to env[BARBICAN_API_VERSION].')
+                            help=('keymanager API version. '
+                                  'Accepts X, X.Y (where X is major and Y '
+                                  'is minor part).  Defaults to '
+                                  'env[BARBICAN_API_VERSION].'))
         parser.epilog = ('See "barbican help COMMAND" for help '
                          'on a specific command.')
         loading.register_session_argparse_arguments(parser)

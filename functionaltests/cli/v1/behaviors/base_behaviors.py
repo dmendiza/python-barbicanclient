@@ -66,6 +66,11 @@ class BaseBehaviors(object):
                          '--os-password', CONF.keymanager.password])
 
         arg_list.extend(['--endpoint', CONF.keymanager.url])
+
+        # Adding this to get secret list tests to pass.  We will remove this
+        # in the subsequent patch when support for secret consumers in added
+        # TODO(alee) remove this next
+        arg_list.extend(['--barbican-api-version', '1.0'])
         self.LOG.info('updated command string: %s', arg_list)
 
     def issue_barbican_command(self, argv):

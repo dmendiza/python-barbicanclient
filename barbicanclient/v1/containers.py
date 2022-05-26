@@ -119,6 +119,10 @@ class Container(ContainerFormatter):
             )
 
     @property
+    def api_version(self):
+        return self._api.api_version
+
+    @property
     def container_ref(self):
         return self._container_ref
 

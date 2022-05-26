@@ -44,10 +44,10 @@ class WhenTestingClientInit(TestClient):
                                project_id=self.project_id)
         self.assertEqual('http://localhost:9311/v1', c.endpoint_override)
 
-    def test_default_headers_are_empty(self):
+    def test_api_version_added_to_default_headers(self):
         c = client._HTTPClient(session=self.session, endpoint=self.endpoint)
         self.assertIsInstance(c._default_headers, dict)
-        self.assertFalse(bool(c._default_headers))
+        self.assertIn('OpenStack-API-Version', c._default_headers.keys())
 
     def test_project_id_is_added_to_default_headers(self):
         c = client._HTTPClient(session=self.session,
